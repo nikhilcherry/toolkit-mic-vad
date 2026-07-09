@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 420" width="720" height="420" font-family="system-ui, sans-serif">
+  <defs>
+    <marker id="arrow2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#444"/>
+    </marker>
+  </defs>
+  <rect x="0" y="0" width="720" height="420" fill="#ffffff"/>
+  <text x="360" y="26" text-anchor="middle" font-size="16" font-weight="700" fill="#111">Speech / silence state machine (isVoiced)</text>
+
+  <!-- SILENT state -->
+  <circle cx="180" cy="210" r="85" fill="#f3f4f6" stroke="#333" stroke-width="2"/>
+  <text x="180" y="204" text-anchor="middle" font-size="15" font-weight="700" fill="#111">SILENT</text>
+  <text x="180" y="224" text-anchor="middle" font-size="11" fill="#444">isVoiced = false</text>
+
+  <!-- VOICED state -->
+  <circle cx="540" cy="210" r="85" fill="#eafbea" stroke="#15803d" stroke-width="2"/>
+  <text x="540" y="204" text-anchor="middle" font-size="15" font-weight="700" fill="#111">VOICED</text>
+  <text x="540" y="224" text-anchor="middle" font-size="11" fill="#444">isVoiced = true</text>
+
+  <!-- SILENT -> VOICED (top arc) -->
+  <path d="M 231,141 Q 360,55 489,141" fill="none" stroke="#15803d" stroke-width="2" marker-end="url(#arrow2)"/>
+  <text x="360" y="80" text-anchor="middle" font-size="11.5" fill="#15803d" font-weight="600">isSpeech(frame) is true</text>
+  <text x="360" y="96" text-anchor="middle" font-size="10.5" fill="#444">(RMS &gt; threshold) &#8594; emit('speechStart')</text>
+
+  <!-- VOICED -> SILENT (bottom arc) -->
+  <path d="M 489,279 Q 360,365 231,279" fill="none" stroke="#b91c1c" stroke-width="2" marker-end="url(#arrow2)"/>
+  <text x="360" y="352" text-anchor="middle" font-size="11.5" fill="#b91c1c" font-weight="600">no speech for &#8805; hangoverMs</text>
+  <text x="360" y="368" text-anchor="middle" font-size="10.5" fill="#444">&#8594; emit('speechEnd')</text>
+
+  <!-- VOICED self loop -->
+  <path d="M 505,130 C 480,55 600,55 575,130" fill="none" stroke="#2563eb" stroke-width="2" marker-end="url(#arrow2)"/>
+  <text x="540" y="52" text-anchor="middle" font-size="11" fill="#2563eb" font-weight="600">speech continues</text>
+  <text x="540" y="67" text-anchor="middle" font-size="10" fill="#444">lastSpeechTime = now (hangover resets)</text>
+
+  <!-- SILENT self loop -->
+  <path d="M 145,130 C 120,60 240,60 215,130" fill="none" stroke="#6b7280" stroke-width="2" marker-end="url(#arrow2)"/>
+  <text x="180" y="404" text-anchor="middle" font-size="10" fill="#666">frame RMS stays &#8804; threshold &#8594; state unchanged</text>
+</svg>

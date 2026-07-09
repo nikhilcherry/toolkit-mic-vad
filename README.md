@@ -2,6 +2,8 @@
 
 Standalone microphone capture + voice activity detection + audio chunking for the browser. Hands Float32 mono audio directly to an on-device ASR (e.g. Whisper via transformers.js). Plain ES module, zero npm dependencies, no build step — just `python3 -m http.server`.
 
+![MicVAD data flow](images/architecture.svg)
+
 ## Usage
 
 ```js
@@ -42,9 +44,29 @@ vad.stop();                // releases the mic, closes the AudioContext
 - `vad.on(event, handler)` / `vad.off(event, handler)` — minimal inline event emitter, no dependencies.
 - `vad.isSpeech(frame)` — the speech/silence decision, isolated as a single swappable method (default: RMS vs. `threshold`). Replace it (subclass, or `vad.isSpeech = fn`) to plug in a model-based VAD, e.g. Silero ONNX, without touching any other public API.
 
+### Speech / silence state machine
+
+`isVoiced` is driven by a small state machine: a frame with RMS above `threshold` flips it to `true` and fires `speechStart`; it only flips back to `false` — firing `speechEnd` — once `hangoverMs` has passed with no speech frame. Speech frames continuously reset the hangover clock while voiced.
+
+![Speech/silence state machine](images/vad-state-machine.svg)
+
+### Event sequence
+
+A full session looks like this: `start()` → `speechStart`/`speechEnd` pairs as the mic picks up utterances, `chunk` events interleaved either right at a `speechEnd` (normal flush) or mid-utterance if speech runs long (hard flush) → `stop()`. `level` fires continuously underneath all of this at ~30×/sec.
+
+![Event sequence over one session](images/event-sequence.svg)
+
 ## Chunk-flush behavior
 
 Once the buffered audio reaches `chunkSec`, MicVAD waits for the next moment `isVoiced` goes false and flushes there, so words aren't cut mid-utterance; if speech runs on continuously it hard-flushes anyway at `chunkSec * 1.5` so chunks never grow unbounded. Every flush keeps the last `chunkOverlapSec` of audio buffered for the next chunk, so words spanning a chunk boundary aren't lost.
+
+![Chunk-flush timeline](images/chunk-timeline.svg)
+
+## Internals: worklet → main thread
+
+The AudioWorklet processor (inlined via Blob URL) accumulates 128-sample render quanta into `frameSamples`-length frames (~30/sec) and hands each one to the main thread as a zero-copy transfer. `MicVAD._onFrame()` on the main thread then does RMS, the `isSpeech()` call, hangover bookkeeping, and chunk buffering — all outside the audio rendering thread, so it's free to be as slow or as fancy (e.g. a Silero ONNX inference) as needed without glitching capture.
+
+![Inside the AudioWorklet](images/frame-pipeline.svg)
 
 ## Demo
 
