@@ -83,3 +83,18 @@ Then open `http://localhost:8000/demo.html` and click **Start**.
 ## Composes with
 
 `'chunk'` feeds an ASR (e.g. Whisper via transformers.js); `isVoiced` feeds `AttributionFuser.record()`.
+
+## Tests
+
+```bash
+node --test
+```
+
+`start()`/`stop()` need a real browser (getUserMedia, AudioContext,
+AudioWorklet) and aren't covered. Everything downstream of a captured
+frame is: RMS, the `isSpeech()` threshold gate, the speech/silence state
+machine (`_updateVoiced` takes `now` as an explicit argument, so no clock
+mocking needed there), and chunk buffering/flush (`_onFrame`/`_flush`,
+tested with a tiny fake `performance.now()`) — the flush-at-chunkSec vs.
+wait-for-silence vs. hard-flush-at-1.5x logic described above, and
+overlap retention across a flush. 14 tests, no dependencies required.
