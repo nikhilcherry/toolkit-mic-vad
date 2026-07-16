@@ -39,7 +39,7 @@ vad.stop();                // releases the mic, closes the AudioContext
 
 - `new MicVAD(options)` — `sampleRate`, `threshold`, `hangoverMs`, `chunkSec`, `chunkOverlapSec` (all optional, defaults shown above).
 - `vad.start()` — async, requests mic permission and begins processing. Idempotent: calling it again while running or starting is a no-op.
-- `vad.stop()` — releases the mic and closes the AudioContext. Idempotent: safe to call before `start()` or more than once.
+- `vad.stop()` — flushes any still-buffered audio as a final `chunk`, then releases the mic and closes the AudioContext. Idempotent: safe to call before `start()` or more than once. Called while `start()` is still setting up, it takes effect the moment setup finishes — the mic is never left running.
 - `vad.isVoiced` — live boolean, true while inside a speech-plus-hangover window.
 - `vad.on(event, handler)` / `vad.off(event, handler)` — minimal inline event emitter, no dependencies.
 - `vad.isSpeech(frame)` — the speech/silence decision, isolated as a single swappable method (default: RMS vs. `threshold`). Replace it (subclass, or `vad.isSpeech = fn`) to plug in a model-based VAD, e.g. Silero ONNX, without touching any other public API.

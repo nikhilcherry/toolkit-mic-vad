@@ -119,6 +119,7 @@ export class MicVAD extends EventEmitter {
 
     this._state = 'idle'; // 'idle' | 'running' | 'stopped'
     this._starting = null;
+    this._stopRequested = false;
 
     this._isVoiced = false;
     this._lastSpeechTime = -Infinity;
@@ -163,12 +164,18 @@ export class MicVAD extends EventEmitter {
     if (this._state === 'running') return;
     if (this._starting) return this._starting;
 
+    this._stopRequested = false;
     this._starting = this._doStart();
     try {
       await this._starting;
       this._state = 'running';
     } finally {
       this._starting = null;
+    }
+    if (this._stopRequested) {
+      // stop() was called while start() was still setting up: honor it now
+      // instead of leaving the mic running.
+      this.stop();
     }
   }
 
@@ -189,22 +196,36 @@ export class MicVAD extends EventEmitter {
       );
     }
 
-    const ctx = new AudioContext({ sampleRate: this.sampleRate });
-    if (ctx.state === 'suspended') {
-      await ctx.resume();
+    let ctx = null;
+    let blobUrl = null;
+    let source;
+    let workletNode;
+    try {
+      ctx = new AudioContext({ sampleRate: this.sampleRate });
+      if (ctx.state === 'suspended') {
+        await ctx.resume();
+      }
+
+      const blob = new Blob([WORKLET_SOURCE], { type: 'application/javascript' });
+      blobUrl = URL.createObjectURL(blob);
+      await ctx.audioWorklet.addModule(blobUrl);
+
+      source = ctx.createMediaStreamSource(stream);
+      workletNode = new AudioWorkletNode(ctx, 'mic-vad-processor', {
+        processorOptions: { frameSamples: this._frameSamples },
+      });
+      workletNode.port.onmessage = (event) => this._onFrame(event.data);
+      source.connect(workletNode);
+      // Never connected to ctx.destination — capture only, no playback/echo.
+    } catch (err) {
+      // Setup failed partway: release everything acquired so far, most
+      // importantly the mic stream — otherwise the browser's recording
+      // indicator stays on with no way to turn it off.
+      stream.getTracks().forEach((track) => track.stop());
+      if (ctx) ctx.close();
+      if (blobUrl) URL.revokeObjectURL(blobUrl);
+      throw err;
     }
-
-    const blob = new Blob([WORKLET_SOURCE], { type: 'application/javascript' });
-    const blobUrl = URL.createObjectURL(blob);
-    await ctx.audioWorklet.addModule(blobUrl);
-
-    const source = ctx.createMediaStreamSource(stream);
-    const workletNode = new AudioWorkletNode(ctx, 'mic-vad-processor', {
-      processorOptions: { frameSamples: this._frameSamples },
-    });
-    workletNode.port.onmessage = (event) => this._onFrame(event.data);
-    source.connect(workletNode);
-    // Never connected to ctx.destination — capture only, no playback/echo.
 
     this._stream = stream;
     this._ctx = ctx;
@@ -220,12 +241,23 @@ export class MicVAD extends EventEmitter {
   }
 
   /**
-   * Releases the microphone and closes the AudioContext.
-   * Safe to call before start() or multiple times; no-ops if not running.
+   * Releases the microphone and closes the AudioContext. Any audio still
+   * buffered is flushed as a final 'chunk' first, so the tail of the last
+   * utterance isn't lost. Safe to call before start() or multiple times;
+   * no-ops if not running. Called while start() is still setting up, it
+   * takes effect as soon as setup finishes.
    */
   stop() {
+    if (this._starting) {
+      this._stopRequested = true;
+      return;
+    }
     if (this._state !== 'running') return;
     this._state = 'stopped';
+
+    if (this._chunkSamples > 0) {
+      this._flush(performance.now());
+    }
 
     if (this._workletNode) {
       this._workletNode.port.onmessage = null;

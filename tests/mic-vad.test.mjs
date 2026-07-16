@@ -212,3 +212,77 @@ test('chunk t0/t1 bound the buffered audio in time', () => {
   const impliedDurationMs = (chunk.audio.length / vad.sampleRate) * 1000;
   assert.ok(Math.abs((chunk.t1 - chunk.t0) - impliedDurationMs) < (vad._frameSamples / vad.sampleRate) * 1000);
 });
+
+// --- stop() behavior ---
+
+test('stop() flushes buffered audio as a final chunk before teardown', () => {
+  withFakeClock((clock) => {
+    const vad = new MicVAD({ sampleRate: 1000, chunkSec: 4 });
+    vad._state = 'running'; // frames only ever arrive while running
+
+    const chunks = [];
+    vad.on('chunk', (c) => chunks.push(c));
+
+    // buffer half a chunk of audio -- not enough to flush on its own
+    clock.set(1000);
+    vad._onFrame(constFrame(500, 0.001));
+    clock.advance(500);
+    vad._onFrame(constFrame(500, 0.001));
+    assert.equal(chunks.length, 0, 'nothing should flush below chunkSec');
+
+    vad.stop();
+
+    assert.equal(chunks.length, 1, 'stop() must flush the tail of the last utterance');
+    assert.equal(chunks[0].audio.length, 1000);
+    assert.equal(vad._chunkSamples, 0, 'buffers cleared after stop');
+  });
+});
+
+test('stop() with nothing buffered emits no chunk', () => {
+  const vad = new MicVAD();
+  vad._state = 'running';
+  const chunks = [];
+  vad.on('chunk', (c) => chunks.push(c));
+  vad.stop();
+  assert.equal(chunks.length, 0);
+});
+
+test('stop() during a pending start() takes effect once setup completes', async () => {
+  const vad = new MicVAD();
+  let releaseSetup;
+  vad._doStart = () => new Promise((resolve) => { releaseSetup = resolve; });
+
+  const starting = vad.start();
+  vad.stop(); // user changed their mind while getUserMedia was still pending
+
+  releaseSetup();
+  await starting;
+
+  assert.equal(vad._state, 'stopped', 'the mic must not be left running');
+});
+
+test('a failed setup step releases the mic stream it already acquired', async () => {
+  const stopped = [];
+  const fakeStream = { getTracks: () => [{ stop: () => stopped.push('track') }] };
+
+  const realNavigatorDesc = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
+  const realAudioContext = globalThis.AudioContext;
+  Object.defineProperty(globalThis, 'navigator', {
+    value: { mediaDevices: { getUserMedia: async () => fakeStream } },
+    configurable: true,
+  });
+  globalThis.AudioContext = class {
+    constructor() { throw new Error('AudioContext unavailable'); }
+  };
+
+  try {
+    const vad = new MicVAD();
+    await assert.rejects(() => vad.start(), /AudioContext unavailable/);
+    assert.deepEqual(stopped, ['track'], 'the acquired mic track must be stopped on failure');
+    assert.equal(vad._state, 'idle');
+  } finally {
+    globalThis.AudioContext = realAudioContext;
+    if (realNavigatorDesc) Object.defineProperty(globalThis, 'navigator', realNavigatorDesc);
+    else delete globalThis.navigator;
+  }
+});

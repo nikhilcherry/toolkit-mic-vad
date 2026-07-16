@@ -1,0 +1,11 @@
+{
+  "name": "toolkit-mic-vad",
+  "version": "1.0.0",
+  "description": "Microphone capture + RMS voice activity detection + ASR-ready audio chunking for the browser, in one zero-dependency ES module.",
+  "type": "module",
+  "main": "mic-vad.js",
+  "scripts": {
+    "test": "node --test"
+  },
+  "license": "MIT"
+}
