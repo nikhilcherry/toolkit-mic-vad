@@ -1,5 +1,11 @@
 # toolkit-mic-vad
 
+<p align="center">
+  <img alt="js" src="https://img.shields.io/badge/JavaScript-zero_npm_deps-F7DF1E">
+  <img alt="audio" src="https://img.shields.io/badge/AudioWorklet-realtime_VAD-9333ea">
+  <img alt="license" src="https://img.shields.io/badge/license-MIT-green">
+</p>
+
 Standalone microphone capture + voice activity detection + audio chunking for the browser. Hands Float32 mono audio directly to an on-device ASR (e.g. Whisper via transformers.js). Plain ES module, zero npm dependencies, no build step — just `python3 -m http.server`.
 
 ![MicVAD data flow](images/architecture.svg)
@@ -98,3 +104,7 @@ mocking needed there), and chunk buffering/flush (`_onFrame`/`_flush`,
 tested with a tiny fake `performance.now()`) — the flush-at-chunkSec vs.
 wait-for-silence vs. hard-flush-at-1.5x logic described above, and
 overlap retention across a flush. 14 tests, no dependencies required.
+
+## License
+
+MIT
