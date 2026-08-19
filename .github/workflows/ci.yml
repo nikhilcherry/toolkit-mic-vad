@@ -1,0 +1,28 @@
+name: ci
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # `node --test` is the built-in runner; 20 is the oldest release that
+        # has it in a form these suites use.
+        node-version: ["20", "22"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      # Nothing is installed on purpose: this package is dependency-free ES
+      # modules, and a run that never touches npm is what keeps that true.
+      - name: Tests
+        run: node --test
